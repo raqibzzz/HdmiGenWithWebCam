@@ -103,13 +103,16 @@ public class Script
     int         iSourceChangeMask   = 0xFFFF;                                       // Source change mask enable (1 bit per source)
 
     // Defects selection
-    EDefectType eDefectType         = EDefectType.CLEAN;                            // Defect Initial value
+    EDefectType eDefectType         = EDefectType.CLOCK_JITTER;                     // Defect Initial value
     EChangeAlgo eDefectChangeAlgo   = EChangeAlgo.INCREMENTAL;                      // Defect change algo
-    int         iDefectChangeMask   = 0x0002;                                       // Defect change mask enable (1 bit per defect)
+    int         iDefectChangeMask   = 0x0012;                                       // Defect mask: CLOCK_JITTER (bit1) + TMDS_OUTPUT_ENABLE glitch (bit4)
     int         iDefectImageMask    = 0xFF7D;                                       // Defect image verification mask enable (1 bit per defect).
 
     // LOOP_DELAY_MS holds the delay in ms before taking a webcam snapshot
     const int LOOP_DELAY_MS = 5000;
+
+    // TEST_DURATION_HOURS controls automatic test termination duration (e.g., overnight run).
+    const int TEST_DURATION_HOURS = 12;
     // ======================================================================
     // User Variables (End)
     // ======================================================================
@@ -1783,7 +1786,7 @@ public class Script
         strHdrLine += "SVN date: " + strSvnDate.Trim('$') + "\r\n";
         strHdrLine += "Test parameters : Sources (start=" + eSourceRes +", algo=" + eSourceChangeAlgo + ", source_mask=0x" + Convert.ToString(iSourceChangeMask, 16) + "\r\n";
         strHdrLine += "Test parameters : Defects (start=" + eDefectType +", algo=" + eDefectChangeAlgo + ", defect_mask=0x" + Convert.ToString(iDefectChangeMask, 16) + ", image_mask=0x" + Convert.ToString(iDefectImageMask, 16) +"\r\n";
-        strHdrLine += "Test parameters : StopAfterErrorCount=" + iStopAfterErrorCount + ", Defect_Jitter_mTbit=" + iJitterAmplitude_mTbit;
+        strHdrLine += "Test parameters : StopAfterErrorCount=" + iStopAfterErrorCount + ", Defect_Jitter_mTbit=" + iJitterAmplitude_mTbit + ", TestDurationHours=" + TEST_DURATION_HOURS;
 
         m_oHostOptions.AppendToDebug(strHdrLine, false, true);
         WriteLogFile2(LogFilename, strHdrLine);
@@ -2012,6 +2015,16 @@ public class Script
                 (int)EDefectType.COUNT,
                 iDefectChangeMask
             );
+
+            // =====================================================
+            // Stop after configured test duration (overnight run support)
+            // =====================================================
+            if ((DateTime.Now - TestStartTime).TotalHours >= TEST_DURATION_HOURS)
+            {
+                bTerminateComplete = true;
+                m_oHostOptions.AppendToDebug("\r\nTermination after configured duration of " + TEST_DURATION_HOURS + " hours... \r\n");
+                break;
+            }
 
             // =====================================================
             // Check for terminate request
