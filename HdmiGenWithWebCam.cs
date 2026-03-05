@@ -103,9 +103,9 @@ public class Script
     int         iSourceChangeMask   = 0xFFFF;                                       // Source change mask enable (1 bit per source)
 
     // Defects selection
-    EDefectType eDefectType         = EDefectType.CLOCK_JITTER;                     // Defect Initial value
-    EChangeAlgo eDefectChangeAlgo   = EChangeAlgo.INCREMENTAL;                      // Defect change algo
-    int         iDefectChangeMask   = 0x0012;                                       // Defect mask: CLOCK_JITTER (bit1) + TMDS_OUTPUT_ENABLE glitch (bit4)
+    EDefectType eDefectType         = EDefectType.CLEAN;                            // Defect Initial value
+    EChangeAlgo eDefectChangeAlgo   = EChangeAlgo.RANDOM;                           // Defect change algo
+    int         iDefectChangeMask   = 0x01FF;                                       // All 9 defect types enabled (bits 0-8: CLEAN through BLACK)
     int         iDefectImageMask    = 0xFF7D;                                       // Defect image verification mask enable (1 bit per defect).
 
     // LOOP_DELAY_MS holds the delay in ms before taking a webcam snapshot
