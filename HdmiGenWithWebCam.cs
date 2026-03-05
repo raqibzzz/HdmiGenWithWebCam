@@ -84,8 +84,9 @@ public class Script
         TMDS_SCRAMBLING         = 5, // TMDS scrambling. Done a random number of time.
         RANDOM_5V_DISCONNECT    = 6, // 5V random disconnect. Turn OFF-ON the +5V on HDMI a random number of time.
         TMDS_SWAP               = 7, // Swap TMDS Pair randomly
-        BLACK                   = 8, // Black screen : used to verify capture is still alive
-        COUNT                   = 9, // Number of values
+        ALL_DRESS               = 8, // Apply all defects combined (jitter + skew + sequential + OE glitch + scrambling + swap)
+        BLACK                   = 9, // Black screen : used to verify capture is still alive
+        COUNT                   = 10, // Number of values
     }
 
     // ======================================================================
@@ -96,6 +97,10 @@ public class Script
     string  IP_Address              = "192.168.182.218";    // Ping IP addresscmdcmd
     int     iStopAfterErrorCount    = 0;                    // Stop on N errors (0 to disable).
     int     iJitterAmplitude_mTbit  = 300;                  // Jitter amplitude in mTbit (0.300Tbit = 300)
+    bool    bTransitionalJitter     = true;                 // If true, jitter is removed after iJITTER_TIME_MS (transitional defect)
+    int     iJITTER_TIME_MS         = 500;                  // How long (ms) jitter is applied before being removed
+    bool    bTransitionalInterPairDelay = true;             // If true, inter-pair delay is removed after iINTER_PAIR_DELAY_TIME_MS
+    int     iINTER_PAIR_DELAY_TIME_MS   = 500;              // How long (ms) inter-pair delay is applied before being removed
 
     // Source resolution selection
     ESourceRes  eSourceRes          = ESourceRes.HDMI_1920x1080P60_148500_RGB_8;    // Source initial value
@@ -105,8 +110,8 @@ public class Script
     // Defects selection
     EDefectType eDefectType         = EDefectType.CLEAN;                            // Defect Initial value
     EChangeAlgo eDefectChangeAlgo   = EChangeAlgo.RANDOM;                           // Defect change algo
-    int         iDefectChangeMask   = 0x01FF;                                       // All 9 defect types enabled (bits 0-8: CLEAN through BLACK)
-    int         iDefectImageMask    = 0xFF7D;                                       // Defect image verification mask enable (1 bit per defect).
+    int         iDefectChangeMask   = 0x03FF;                                       // All 10 defect types enabled (bits 0-9: CLEAN through BLACK)
+    int         iDefectImageMask    = 0x03BD;                                       // Image check mask: all except CLOCK_JITTER(1) and TMDS_SWAP(7)
 
     // LOOP_DELAY_MS holds the delay in ms before taking a webcam snapshot
     const int LOOP_DELAY_MS = 5000;
@@ -361,7 +366,6 @@ public class Script
         // MessageBox.Show("Should have seen a checkedListBox by now...");
         if (
             m_oComTool.IsSessionOpenned(m_oSrcHandle)
-            && m_oComTool.IsSessionOpenned(m_oIoHandle)
             && (m_oNetwork != null) )
         {
             m_oThread = new Thread(RunMyStuff);
@@ -862,7 +866,7 @@ public class Script
             // Set clock jitter to desired Tbit amount
             strCommand = "W3" + iJitterAmp.ToString("X2");
         }
-        m_oComTool.SendTextCommandEx(strCommand, false);
+        m_oComTool.SendTextCommandEx(m_oSrcHandle, strCommand, false);
     }
 
     /************************************************************************************************************\
@@ -898,6 +902,14 @@ public class Script
         m_oComTool.SendTextCommandEx(m_oSrcHandle, "WA" + Reg_0xA_ClkD2.ToString("X2"), false); // WAxx  Bit Delay TMDS CLK D2
         // <7:4> CLK  <3:0> D2
         // Maximum delay is 15 bits
+
+        if (bTransitionalInterPairDelay == true)
+        {
+            // Hold the inter-pair delay for the configured time then remove it
+            Thread.Sleep(iINTER_PAIR_DELAY_TIME_MS);
+            m_oComTool.SendTextCommandEx(m_oSrcHandle, "W900", false); // Remove inter-pair delay D1 D0
+            m_oComTool.SendTextCommandEx(m_oSrcHandle, "WA00", false); // Remove inter-pair delay CLK D2
+        }
     }
 
     /************************************************************************************************************\
@@ -1161,6 +1173,13 @@ public class Script
             // Add clock jitter
             SetClockJitter(iPixFreqKHz, iColorDepth);
 
+            if (bTransitionalJitter == true)
+            {
+                // Hold jitter for the configured time then remove it
+                Thread.Sleep(iJITTER_TIME_MS);
+                m_oComTool.SendTextCommandEx(m_oSrcHandle, "W300", false); // Remove jitter
+            }
+
             // Wait a bit
             Thread.Sleep(TMDS_OFF_TIME_MS);
 
@@ -1267,6 +1286,39 @@ public class Script
             Thread.Sleep(TMDS_OFF_TIME_MS);
 
             // Do pair swap
+            SwapTmdsPairRandom();
+        }
+        else if (eDefectType == EDefectType.ALL_DRESS) // Apply all defects combined
+        {
+            // Disable HDMI output
+            m_oComTool.SendTextCommandEx(m_oSrcHandle, ",", false); // Disable HDMI
+
+            // Set resolution and clock rate
+            SetHdmiSource(eSourceRes);
+
+            // Reset source
+            m_oComTool.SendTextCommandEx(m_oSrcHandle, "!", false); // Reset source
+
+            // Wait a bit
+            Thread.Sleep(TMDS_OFF_TIME_MS);
+
+            // Add clock jitter
+            SetClockJitter(iPixFreqKHz, iColorDepth);
+
+            // Add inter-pair skew delay
+            InterPairDelayRandom(2);
+
+            // Enable lanes sequentially in random order
+            SequentialDataRandom();
+
+            // Glitchy output enable toggling
+            GlitchyOutputEnableRandom();
+
+            // TMDS scrambling
+            ScramblingRandom();
+
+            // TMDS pair swap (twice for extra stress)
+            SwapTmdsPairRandom();
             SwapTmdsPairRandom();
         }
         if (eDefectType == EDefectType.BLACK) // Black screen
@@ -1600,8 +1652,7 @@ public class Script
     {
         bool bHideCmdBox = true;
         Process oProcess = new Process();
-        // oProcess.StartInfo.FileName  = "ImageProcess";
-        oProcess.StartInfo.FileName = "/../cprogram/ImageProcess/bin/Debug/ImageProcess";
+        oProcess.StartInfo.FileName = @"C:\program\ImageProcess\bin\Debug\ImageProcess";
         oProcess.StartInfo.Arguments = "";
         oProcess.StartInfo.UseShellExecute = false;
         // Redirect the output stream of the child process.
