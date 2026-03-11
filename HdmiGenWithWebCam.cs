@@ -9,8 +9,6 @@
 // $HeadURL: http://rex/mgi_svn/Projects/HdmiGen/Trunk/Script/HdmiGenWithWebCam.cs $
 // $Revision: 113977 $
 // $Date: 2023-09-07 15:00:26 -0400 (Thu, 07 Sep 2023) $
-// $Author: sfortin$
-// Author: Sylvain Fortin
 // Project: M7100 HDMI input certification
 // Documentation:
 // Description: This script control the Digilent Nexys Video board to produce HDMI output with some transition defects.
